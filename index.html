@@ -99,9 +99,12 @@ button, input { font: inherit; }
 svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex: none; }
 
 /* ─── Top menu ─── */
-.edu-header { position: static; background: var(--paper); border-bottom: 1px solid var(--line-2); }
-.edu-header-inner { max-width: var(--shell); margin: 0 auto; padding: 8px var(--gutter); display: flex; align-items: center; gap: 12px; }
-.edu-logo { width: 64px; height: 64px; display: block; margin-right: -6px; }
+.edu-header { position: relative; background: var(--paper); border-bottom: 1px solid var(--line-2); }
+.edu-header .load-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: transparent; }
+.edu-header .load-bar[hidden] { display: none; }
+.edu-header .load-fill { height: 100%; width: 0; background: var(--yellow); transition: width .3s ease; }
+.edu-header-inner { max-width: var(--shell); margin: 0 auto; padding: 6px var(--gutter); display: flex; align-items: center; gap: 12px; }
+.edu-logo { width: 52px; height: 52px; display: block; margin-right: -5px; }
 .edu-wordmark { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -.02em; color: var(--ink); }
 .header-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
@@ -318,6 +321,7 @@ kbd { font-family: var(--font-mono); font-size: 12px; background: var(--paper-2)
       <button class="icon-btn kbd-btn" id="helpBtn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><i data-lucide="keyboard"></i></button>
     </div>
   </div>
+  <div class="load-bar" id="loadBar" hidden role="progressbar" aria-label="Model loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="load-fill" id="loadFill"></div></div>
 </header>
 
 <header class="page-head">
@@ -511,6 +515,7 @@ const el = {
   output: $('output'), emptyOut: $('emptyOut'),
   bar: $('bar'), barFill: $('barFill'), barLive: $('barLive'), stats: $('stats'), legend: $('legend'),
   announcer: $('announcer'), toast: $('toast'),
+  loadBar: $('loadBar'), loadFill: $('loadFill'),
   helpDialog: $('helpDialog'), helpBtn: $('helpBtn'), helpClose: $('helpClose'),
 };
 
@@ -588,9 +593,9 @@ function scrolledToBottom(node) { return node.scrollHeight - node.scrollTop - no
 
 // ─── Render ───
 function renderModel() {
-  const { status, device, error } = App.model;
+  const { status, device, error, progress } = App.model;
   const map = {
-    loading: ['yellow', 'Loading model'],
+    loading: ['yellow', progress ? `Loading model · ${progress}%` : 'Loading model'],
     ready: ['green', `Model ready · ${(device || 'webgpu').toUpperCase()}`],
     error: ['red', 'Model failed'],
     needfolder: ['yellow', 'Model folder needed'],
@@ -601,6 +606,9 @@ function renderModel() {
   el.modelChipText.textContent = text;
   el.modelChip.title = error || '';
   el.body.dataset.model = status;
+  el.loadBar.hidden = status !== 'loading';
+  el.loadBar.setAttribute('aria-valuenow', String(progress || 0));
+  el.loadFill.style.width = `${progress || 0}%`;
 }
 
 function renderControls() {
@@ -1034,8 +1042,24 @@ function installModelFetch(TX) {
 }
 
 // source is a folder handle, or HUB_SOURCE to read the model from Hugging Face.
+// Combines transformers.js per-file progress events into one percentage across all model files.
+function createLoadProgress() {
+  const files = new Map();
+  let best = 0;
+  return (event) => {
+    if (event.status === 'progress') files.set(event.file, { loaded: event.loaded, total: event.total });
+    else if (event.status === 'done' && files.has(event.file)) files.get(event.file).loaded = files.get(event.file).total;
+    else return;
+    let loaded = 0, total = 0;
+    for (const f of files.values()) { loaded += f.loaded; total += f.total; }
+    const pct = total ? Math.min(100, Math.floor((loaded / total) * 100)) : 0;
+    if (pct > best) { best = pct; App.model = { ...App.model, progress: pct }; renderModel(); }
+  };
+}
+
 async function loadModel(source) {
   setModel({ status: 'loading' });
+  const onProgress = createLoadProgress();
   App.modelSource = source;
   App.modelDir = source === HUB_SOURCE ? null : source;
   App.engine = null;
@@ -1043,8 +1067,8 @@ async function loadModel(source) {
     if (!navigator.gpu) throw new Error('WebGPU is not available in this browser. Use a recent Chrome or Edge.');
     const TX = await libs;
     installModelFetch(TX);
-    const processor = await TX.AutoProcessor.from_pretrained(MODEL_DIR_NAME);
-    const model = await TX.Qwen3_5ForConditionalGeneration.from_pretrained(MODEL_DIR_NAME, { dtype: MODEL_DTYPE, device: 'webgpu' });
+    const processor = await TX.AutoProcessor.from_pretrained(MODEL_DIR_NAME, { progress_callback: onProgress });
+    const model = await TX.Qwen3_5ForConditionalGeneration.from_pretrained(MODEL_DIR_NAME, { dtype: MODEL_DTYPE, device: 'webgpu', progress_callback: onProgress });
     App.engine = { TX, processor, model };
     setModel({ status: 'ready', device: 'webgpu' });
     announce('Model ready');
