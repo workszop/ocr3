@@ -1,0 +1,12 @@
+# intermediate working artifacts (never committed)
+mockups/
+plans/
+superpowers/
+progress.md
+review*.md
+*.plan.md
+*.draft.*
+scratch/
+steps.md
+webgpu/
+node_modules/
