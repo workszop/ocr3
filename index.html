@@ -1018,6 +1018,28 @@ async function validateModelDir(dir) {
   } catch { return false; }
 }
 
+// Hugging Face downloads: concurrent requests for the same file share one transfer, and a dropped
+// transfer is retried (the browser's HTTP/2 connection to the CDN sometimes resets mid-download).
+const HUB_FETCH_ATTEMPTS = 3;
+const hubInflight = new Map();
+function fetchHubFile(nativeFetch, url, opts) {
+  if (hubInflight.has(url)) return hubInflight.get(url);
+  const transfer = (async () => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await nativeFetch(url, opts);
+        if (!response.ok) return { status: response.status, blob: null };
+        return { status: response.status, blob: await response.blob() };
+      } catch (err) {
+        if (attempt >= HUB_FETCH_ATTEMPTS) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
+    }
+  })().finally(() => hubInflight.delete(url));
+  hubInflight.set(url, transfer);
+  return transfer;
+}
+
 // Serves the model's URLs from the picked folder or from the Hugging Face repo; everything else keeps the normal fetch.
 function installModelFetch(TX) {
   const { env } = TX;
@@ -1031,7 +1053,10 @@ function installModelFetch(TX) {
     const m = MODEL_URL_RE.exec(String(url));
     if (!m) return nativeFetch(url, opts);
     const path = decodeURIComponent(m[1]);
-    if (fromHub) return nativeFetch(`${HF_MODEL_URL}/${path}`, opts);
+    if (fromHub) {
+      const { status, blob } = await fetchHubFile(nativeFetch, `${HF_MODEL_URL}/${path}`, opts);
+      return blob ? new Response(blob) : new Response(null, { status });
+    }
     try {
       const file = await fileFromHandle(App.modelDir, path);
       return new Response(file);
@@ -1042,24 +1067,42 @@ function installModelFetch(TX) {
 }
 
 // source is a folder handle, or HUB_SOURCE to read the model from Hugging Face.
-// Combines transformers.js per-file progress events into one percentage across all model files.
+// Combines transformers.js per-file progress events into one percentage. The total is the model's
+// known size (all LightOnOCR-3 ONNX files), so the bar does not jump to 100% after the first small file.
+const MODEL_TOTAL_BYTES = 870e6;
 function createLoadProgress() {
   const files = new Map();
-  let best = 0;
   return (event) => {
-    if (event.status === 'progress') files.set(event.file, { loaded: event.loaded, total: event.total });
-    else if (event.status === 'done' && files.has(event.file)) files.get(event.file).loaded = files.get(event.file).total;
+    if (event.status === 'progress') files.set(event.file, event.loaded);
+    else if (event.status === 'done') return;
     else return;
-    let loaded = 0, total = 0;
-    for (const f of files.values()) { loaded += f.loaded; total += f.total; }
-    const pct = total ? Math.min(100, Math.floor((loaded / total) * 100)) : 0;
-    if (pct > best) { best = pct; App.model = { ...App.model, progress: pct }; renderModel(); }
+    let loaded = 0;
+    for (const bytes of files.values()) loaded += bytes;
+    const pct = Math.min(99, Math.floor((loaded / MODEL_TOTAL_BYTES) * 100));
+    if (pct !== App.model.progress) { App.model = { ...App.model, progress: pct }; renderModel(); }
   };
+}
+
+// A download that goes quiet this long is treated as stalled (the network dropped it).
+const LOAD_STALL_MS = 90000;
+let loadWatch = null;
+
+function failLoad(message) {
+  if (App.model.status !== 'loading') return;
+  clearInterval(loadWatch);
+  App.engine = null;
+  setModel({ status: 'error', error: message });
 }
 
 async function loadModel(source) {
   setModel({ status: 'loading' });
-  const onProgress = createLoadProgress();
+  const reportProgress = createLoadProgress();
+  let lastActivity = Date.now();
+  const onProgress = (event) => { lastActivity = Date.now(); reportProgress(event); };
+  clearInterval(loadWatch);
+  loadWatch = setInterval(() => {
+    if (Date.now() - lastActivity > LOAD_STALL_MS) failLoad('The model download stalled. Check the connection and load it again.');
+  }, 5000);
   App.modelSource = source;
   App.modelDir = source === HUB_SOURCE ? null : source;
   App.engine = null;
@@ -1069,13 +1112,19 @@ async function loadModel(source) {
     installModelFetch(TX);
     const processor = await TX.AutoProcessor.from_pretrained(MODEL_DIR_NAME, { progress_callback: onProgress });
     const model = await TX.Qwen3_5ForConditionalGeneration.from_pretrained(MODEL_DIR_NAME, { dtype: MODEL_DTYPE, device: 'webgpu', progress_callback: onProgress });
+    clearInterval(loadWatch);
     App.engine = { TX, processor, model };
     setModel({ status: 'ready', device: 'webgpu' });
     announce('Model ready');
   } catch (err) {
-    setModel({ status: 'error', error: err.message || String(err) });
+    failLoad(err.message || String(err));
   }
 }
+
+// Background downloads can fail outside the awaited load; surface those instead of waiting forever.
+window.addEventListener('unhandledrejection', (e) => {
+  failLoad(`The model could not be loaded (${e.reason?.message || e.reason || 'unknown error'}). Check the connection and try again.`);
+});
 
 // ─── Model folder memory (IndexedDB holds the directory handle) ───
 function dbRequest(mode, run) {
