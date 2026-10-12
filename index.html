@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
 <style>
   @keyframes boot-reveal { to { visibility: visible; } }
   html:not(.app-ready) body { visibility: hidden; animation: boot-reveal 0s 4s forwards; }
@@ -256,7 +256,7 @@ body.dragging .card-doc { box-shadow: var(--focus-ring); }
 .blk { position: relative; padding: 8px 12px 6px; margin: 0 -12px 4px; border-radius: var(--r-sm); border: 1px solid transparent; transition: background-color .12s, border-color .12s; }
 .blk.hot, .blk:hover { background: var(--paper-2); border-color: var(--line-2); }
 .blk .tag { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 4px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .08em; padding: 2px 7px; border-radius: var(--r-pill); background: var(--c); color: var(--ct); cursor: pointer; }
+  letter-spacing: .08em; padding: 2px 7px; border: 0; border-radius: var(--r-pill); background: var(--c); color: var(--ct); cursor: pointer; }
 .blk .desc { font-style: italic; color: var(--ink-2); margin: 0; }
 .blk .md > :last-child { margin-bottom: 0; }
 
@@ -350,7 +350,7 @@ kbd { font-family: var(--font-mono); font-size: 12px; background: var(--paper-2)
           <span class="big-icon"><i data-lucide="file-up"></i></span>
           <h3>Drop an image or PDF here</h3>
           <p>or click to choose a file · paste a screenshot with <kbd>Ctrl</kbd>+<kbd>V</kbd></p>
-          <span class="formats">PDF · PNG · JPG · WEBP · TIFF</span>
+          <span class="formats">PDF · PNG · JPG · WEBP</span>
         </div>
         <div class="pdf-tile" id="pdfTile" hidden>
           <span class="big-icon"><i data-lucide="file-text"></i></span>
@@ -360,7 +360,7 @@ kbd { font-family: var(--font-mono); font-size: 12px; background: var(--paper-2)
         <div class="preview" id="preview" hidden>
           <div class="page-frame" id="pageFrame"><img id="pageImg" alt="Page preview"></div>
         </div>
-        <input type="file" id="fileInput" accept=".pdf,image/*,.tif,.tiff" hidden>
+        <input type="file" id="fileInput" accept=".pdf,image/png,image/jpeg,image/webp,image/bmp,image/gif" hidden>
       </div>
       <div class="card-foot">
         <div class="field">
@@ -459,14 +459,15 @@ kbd { font-family: var(--font-mono); font-size: 12px; background: var(--paper-2)
     window.dispatchEvent(new CustomEvent('libs-error', { detail: String(err) }));
   }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous"></script>
 <script>
 // ─── Constants ───
 const RENDER_THROTTLE_MS = 120;
-const IMAGE_EXT = /\.(png|jpe?g|webp|tiff?|bmp|gif)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|webp|bmp|gif)$/i;
+const TIFF_RE = /\.tiff?$/i;
 const BOX_RE = /!\[([a-z_]+\+?)\]\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g;
 const BOX_LINE_RE = /^[ \t]*!\[[a-z_]+\+?\]\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)[ \t]*\n?/gm;
 const PARTIAL_BOX_RE = /!\[[a-z_+]*(\]\(?[\d,\s]*)?$/;
@@ -487,6 +488,7 @@ const App = {
   modelDir: null,        // FileSystemDirectoryHandle when the model comes from a folder
   engine: null,          // { TX, processor, model } once loaded
   stopRequested: false,
+  stopper: null,         // InterruptableStoppingCriteria for the page being read
   file: null,            // File
   fileUrl: null,         // object URL for image previews
   isPdf: false,
@@ -586,6 +588,23 @@ function setSeg(seg, attr, value) {
     const on = b.dataset[attr] === String(value);
     b.classList.toggle('active', on);
     b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;   // roving tabindex: one tab stop per group, arrows move within it
+  });
+}
+
+// Radio-group keyboard pattern: arrow keys move and select, as in a native radio group.
+function enableSegKeys(seg) {
+  seg.querySelectorAll('button').forEach((b) => { b.tabIndex = b.classList.contains('active') ? 0 : -1; });
+  seg.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+    if (!step) return;
+    const buttons = [...seg.querySelectorAll('button:not(:disabled)')];
+    const i = buttons.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next = buttons[(i + step + buttons.length) % buttons.length];
+    next.focus();
+    next.click();
   });
 }
 
@@ -688,6 +707,14 @@ function pageSection(index) {
   return sec;
 }
 
+// A streaming page is re-rendered on every tick. Blocks whose text has not changed reuse their last HTML,
+// so marked, DOMPurify and KaTeX only run on the block still being written.
+function cachedMarkdownBlock(page, k, content) {
+  const cache = (page.htmlCache ??= []);
+  if (cache[k]?.content !== content) cache[k] = { content, html: `<div class="md">${renderMarkdown(content)}</div>` };
+  return cache[k].html;
+}
+
 function renderPage(index) {
   const page = App.job.pages[index];
   if (!page) return;
@@ -708,10 +735,10 @@ function renderPage(index) {
     content.innerHTML = page.blocks.map((blk, k) => {
       const inner = ['image', 'header_image', 'footer_image'].includes((blk.label || '').replace(/\+$/, ''))
         ? `<p class="desc">${escapeHtml(blk.content || '')}</p>`
-        : `<div class="md">${renderMarkdown(blk.content)}</div>`;
+        : cachedMarkdownBlock(page, k, blk.content);
       if (!blk.label) return inner;
       return `<div class="blk lbl-${toneOf(blk.label)}" data-block="${index}:${k}" data-label="${escapeHtml(blk.label)}">`
-        + `<span class="tag" title="Show on page">${escapeHtml(blk.label.replace(/_/g, ' '))}</span>${inner}</div>`;
+        + `<button type="button" class="tag" title="Show on page">${escapeHtml(blk.label.replace(/_/g, ' '))}</button>${inner}</div>`;
     }).join('') + (streaming ? '<span class="cursor"></span>' : '');
   }
   if (stick && isRunning()) el.output.scrollTop = el.output.scrollHeight;
@@ -806,11 +833,16 @@ function setHot(blockId, { scroll } = {}) {
 function setFile(file) {
   if (isRunning() || !file) return;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+  if (TIFF_RE.test(file.name) || file.type === 'image/tiff') {
+    toast('TIFF is not supported in the browser – save as PNG, JPG or PDF');
+    return;
+  }
   if (!isPdf && !file.type.startsWith('image/') && !IMAGE_EXT.test(file.name)) {
     toast('Choose an image or a PDF');
     return;
   }
   if (App.fileUrl) URL.revokeObjectURL(App.fileUrl);
+  revokePageImages(App.job);
   App.file = file;
   App.isPdf = isPdf;
   App.fileUrl = isPdf ? null : URL.createObjectURL(file);
@@ -822,9 +854,15 @@ function setFile(file) {
   el.runBtn.focus();
 }
 
+// Page preview images are object URLs; release them when their job is dropped.
+function revokePageImages(job) {
+  job?.pages.forEach((p) => { if (p?.image) URL.revokeObjectURL(p.image); });
+}
+
 function clearFile() {
   if (isRunning()) return;
   if (App.fileUrl) URL.revokeObjectURL(App.fileUrl);
+  revokePageImages(App.job);
   Object.assign(App, { file: null, fileUrl: null, isPdf: false, job: null, previewIndex: 0 });
   el.fileInput.value = '';
   render();
@@ -834,6 +872,7 @@ function clearFile() {
 let tickTimer = null;
 async function runOcr() {
   if (el.runBtn.disabled) return;
+  revokePageImages(App.job);
   App.job = { status: 'running', total: 0, pages: [], tokens: 0, startedAt: Date.now(), endedAt: null, error: null, mode: App.mode };
   App.previewIndex = 0;
   App.hotBlock = null;
@@ -843,17 +882,19 @@ async function runOcr() {
   announce('Reading started');
   tickTimer = setInterval(renderProgress, 1000);
 
+  let doc = null;
   try {
-    const doc = await openDocument(App.file);
+    doc = await openDocument(App.file);
     const indices = parsePages(App.isPdf ? el.pagesInput.value : '', doc.pageCount);
     handleEvent({ type: 'start', pages: indices.length });
     let tokens = 0, seconds = 0;
     for (let i = 0; i < indices.length; i++) {
       if (App.stopRequested) break;
       const canvas = await doc.render(indices[i]);
-      const preview = URL.createObjectURL(await canvasBlob(canvas));
+      const blob = await canvasBlob(canvas);   // encoded once: used for the preview and the model
+      const preview = URL.createObjectURL(blob);
       handleEvent({ type: 'page', index: i, page: indices[i], image: preview, width: canvas.width, height: canvas.height });
-      const r = await readCanvas(canvas, i);
+      const r = await readCanvas(blob, i);
       tokens += r.tokens;
       seconds += r.seconds;
       handleEvent({ type: 'pageDone', index: i, page: indices[i], text: r.text, tokens: r.tokens, seconds: r.seconds, truncated: r.truncated });
@@ -865,6 +906,7 @@ async function runOcr() {
     announce(`Error: ${App.job.error}`);
   } finally {
     clearInterval(tickTimer);
+    doc?.destroy?.();
     App.job.endedAt = App.job.endedAt || Date.now();
     render();
   }
@@ -915,7 +957,8 @@ function handleEvent(ev) {
 function stopOcr() {
   if (!isRunning()) return;
   App.stopRequested = true;
-  toast('Stopping after the current token…');
+  App.stopper?.interrupt();   // ends the page being generated at the next token
+  toast('Stopping…');
 }
 
 async function copyText() {
@@ -1018,18 +1061,28 @@ async function validateModelDir(dir) {
   } catch { return false; }
 }
 
-// Hugging Face downloads: concurrent requests for the same file share one transfer, and a dropped
-// transfer is retried (the browser's HTTP/2 connection to the CDN sometimes resets mid-download).
+// Hugging Face downloads are written to the Origin Private File System, so the 832 MB model never sits in JS memory
+// and is served from disk on later loads. (Cache API entries of this size fail in Chrome: Cache.put rejects the
+// 483 MB decoder with "Unexpected internal error".) Concurrent requests for the same file share one transfer, and a
+// dropped transfer is retried (the browser's HTTP/2 connection to the CDN sometimes resets mid-download).
+// A file only counts once it is fully written: the writable is aborted, not committed, on failure.
+const HUB_DIR = 'lightonocr-hub';
 const HUB_FETCH_ATTEMPTS = 3;
 const hubInflight = new Map();
-function fetchHubFile(nativeFetch, url, opts) {
+async function hubDirectory() {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(HUB_DIR, { create: true });
+}
+function downloadHubFile(nativeFetch, dir, name, url, opts) {
   if (hubInflight.has(url)) return hubInflight.get(url);
   const transfer = (async () => {
     for (let attempt = 1; ; attempt++) {
       try {
         const response = await nativeFetch(url, opts);
-        if (!response.ok) return { status: response.status, blob: null };
-        return { status: response.status, blob: await response.blob() };
+        if (!response.ok) return response.status;
+        const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+        await response.body.pipeTo(writable);   // closes (commits) the file only after the whole body arrives
+        return 200;
       } catch (err) {
         if (attempt >= HUB_FETCH_ATTEMPTS) throw err;
         await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
@@ -1040,23 +1093,35 @@ function fetchHubFile(nativeFetch, url, opts) {
   return transfer;
 }
 
+async function hubFile(nativeFetch, path, opts) {
+  const url = `${HF_MODEL_URL}/${path}`;
+  if (!navigator.storage?.getDirectory) return nativeFetch(url, opts);   // no OPFS (e.g. file://): stream straight through
+  const dir = await hubDirectory();
+  const name = path.replaceAll('/', '__');
+  const stored = await dir.getFileHandle(name).then((h) => h.getFile(), () => null);
+  if (stored) return new Response(stored);
+  const status = await downloadHubFile(nativeFetch, dir, name, url, opts);
+  if (status !== 200) return new Response(null, { status });
+  return new Response(await (await dir.getFileHandle(name)).getFile());
+}
+
 // Serves the model's URLs from the picked folder or from the Hugging Face repo; everything else keeps the normal fetch.
+// Installed once per page: the wrapper reads App.modelSource on each call, so a later load picks up the new source.
+let modelFetchInstalled = false;
 function installModelFetch(TX) {
   const { env } = TX;
-  const fromHub = App.modelSource === HUB_SOURCE;
   env.allowLocalModels = true;
   env.allowRemoteModels = false;
-  env.useBrowserCache = fromHub;   // the 832 MB hub download is worth caching; folder reads are already local
+  env.useBrowserCache = false;   // hub files are stored by hubFile() (OPFS); transformers.js's Cache API copy would fail on the large files
   env.localModelPath = '/models/';
+  if (modelFetchInstalled) return;
+  modelFetchInstalled = true;
   const nativeFetch = env.fetch;
   env.fetch = async (url, opts) => {
     const m = MODEL_URL_RE.exec(String(url));
     if (!m) return nativeFetch(url, opts);
     const path = decodeURIComponent(m[1]);
-    if (fromHub) {
-      const { status, blob } = await fetchHubFile(nativeFetch, `${HF_MODEL_URL}/${path}`, opts);
-      return blob ? new Response(blob) : new Response(null, { status });
-    }
+    if (App.modelSource === HUB_SOURCE) return hubFile(nativeFetch, path, opts);
     try {
       const file = await fileFromHandle(App.modelDir, path);
       return new Response(file);
@@ -1087,21 +1152,25 @@ function createLoadProgress() {
 const LOAD_STALL_MS = 90000;
 let loadWatch = null;
 
-function failLoad(message) {
-  if (App.model.status !== 'loading') return;
+// Every load gets a number. Only the newest load may change the state, so a stalled load that finishes
+// late (or a retry started while another is pending) cannot overwrite the result of the load that is current.
+let loadSeq = 0;
+function failLoad(seq, message) {
+  if (seq !== loadSeq || App.model.status !== 'loading') return;
   clearInterval(loadWatch);
   App.engine = null;
   setModel({ status: 'error', error: message });
 }
 
 async function loadModel(source) {
+  const seq = ++loadSeq;
   setModel({ status: 'loading' });
   const reportProgress = createLoadProgress();
   let lastActivity = Date.now();
   const onProgress = (event) => { lastActivity = Date.now(); reportProgress(event); };
   clearInterval(loadWatch);
   loadWatch = setInterval(() => {
-    if (Date.now() - lastActivity > LOAD_STALL_MS) failLoad('The model download stalled. Check the connection and load it again.');
+    if (Date.now() - lastActivity > LOAD_STALL_MS) failLoad(seq, 'The model download stalled. Check the connection and load it again.');
   }, 5000);
   App.modelSource = source;
   App.modelDir = source === HUB_SOURCE ? null : source;
@@ -1112,19 +1181,18 @@ async function loadModel(source) {
     installModelFetch(TX);
     const processor = await TX.AutoProcessor.from_pretrained(MODEL_DIR_NAME, { progress_callback: onProgress });
     const model = await TX.Qwen3_5ForConditionalGeneration.from_pretrained(MODEL_DIR_NAME, { dtype: MODEL_DTYPE, device: 'webgpu', progress_callback: onProgress });
+    if (seq !== loadSeq) return;   // superseded by a newer load
     clearInterval(loadWatch);
     App.engine = { TX, processor, model };
     setModel({ status: 'ready', device: 'webgpu' });
     announce('Model ready');
   } catch (err) {
-    failLoad(err.message || String(err));
+    failLoad(seq, err.message || String(err));
   }
 }
 
-// Background downloads can fail outside the awaited load; surface those instead of waiting forever.
-window.addEventListener('unhandledrejection', (e) => {
-  failLoad(`The model could not be loaded (${e.reason?.message || e.reason || 'unknown error'}). Check the connection and try again.`);
-});
+// There is no global unhandledrejection catch-all: a load fails through its own await chain, and a
+// download that goes silent hits the stall watchdog above.
 
 // ─── Model folder memory (IndexedDB holds the directory handle) ───
 function dbRequest(mode, run) {
@@ -1196,6 +1264,7 @@ async function openDocument(file) {
     const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     return {
       pageCount: doc.numPages,
+      destroy: () => doc.destroy(),
       render: async (n) => {
         const page = await doc.getPage(n);
         const base = page.getViewport({ scale: 1 });
@@ -1232,10 +1301,10 @@ function parsePages(spec, count) {
   return [...out].sort((x, y) => x - y);
 }
 
-// Reads one page image; streams text deltas into the same events the old server sent.
-async function readCanvas(canvas, index) {
+// Reads one page image (PNG blob); streams text deltas into the same events the old server sent.
+async function readCanvas(blob, index) {
   const { TX, processor, model } = App.engine;
-  const image = await TX.RawImage.fromBlob(await canvasBlob(canvas));
+  const image = await TX.RawImage.fromBlob(blob);
   const content = [{ type: 'image' }];
   if (App.mode === 'grounding') content.push({ type: 'text', text: 'grounding' });
   const prompt = processor.apply_chat_template([{ role: 'user', content }], { add_generation_prompt: true, enable_thinking: false });
@@ -1247,13 +1316,21 @@ async function readCanvas(canvas, index) {
     callback_function: (text) => handleEvent({ type: 'delta', index, text }),
   });
   const started = performance.now();
-  const out = await model.generate({
-    ...inputs,
-    max_new_tokens: MAX_NEW_TOKENS,
-    do_sample: false,
-    streamer,
-    stopping_criteria: [() => [App.stopRequested]],
-  });
+  const stopper = new TX.InterruptableStoppingCriteria();
+  App.stopper = stopper;
+  if (App.stopRequested) stopper.interrupt();
+  let out;
+  try {
+    out = await model.generate({
+      ...inputs,
+      max_new_tokens: MAX_NEW_TOKENS,
+      do_sample: false,
+      streamer,
+      stopping_criteria: stopper,
+    });
+  } finally {
+    App.stopper = null;
+  }
   const seconds = Math.round((performance.now() - started) / 1000);
   const tokens = out.dims.at(-1) - promptLen;
   const text = processor.batch_decode(out.slice(null, [promptLen, null]), { skip_special_tokens: true })[0];
@@ -1326,6 +1403,13 @@ el.output.addEventListener('mouseover', (e) => {
   const blk = e.target.closest('.blk');
   setHot(blk?.dataset.block || null);
 });
+// keyboard: focusing a block's tag highlights its box on the page
+el.output.addEventListener('focusin', (e) => {
+  const blk = e.target.closest('.blk');
+  if (blk) setHot(blk.dataset.block);
+});
+el.output.addEventListener('focusout', () => setHot(null));
+
 el.output.addEventListener('click', (e) => {
   const blk = e.target.closest('.blk');
   if (!blk) return;
@@ -1358,6 +1442,7 @@ window.addEventListener('keydown', (e) => {
 
 // ─── Init ───
 window.App = App;   // DOM contract + state for automated checks
+[el.modeSeg, el.qualitySeg, el.viewSeg].forEach(enableSegKeys);
 if (window.lucide) lucide.createIcons();
 render();
 initModel();
